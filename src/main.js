@@ -1,11 +1,12 @@
 const config = {
     "start_positive": true,
+    "allow_gap": false,
     "indicator_enabled": true,
     "symbol_radius": 10,
     "step_size": 5,
     "indicator_distance": 250,
-    "outer_max_steps": 1000,
-    "inner_max_steps": 10000,
+    "outer_max_steps": 1,
+    "max_steps": 10000,
     "deg_step": 10,
     "colors": {
         "line": [0,0,0],
@@ -114,32 +115,34 @@ function spread_from_charges() {
             )
         }
     }
-    for (let pos of secondary_array) {
-        let hits = charge_hits[pos.toString()]
-        if (!hits) {
-            hits = []
-        }
-        let hit_gaps = deg_gap(hits)
-        for (let gap of hit_gaps) {
-            if (gap[1] <= gap[0]) {
-                gap[1] = (gap[1] + 360)
+    if (!config.allow_gap) {
+        for (let pos of secondary_array) {
+            let hits = charge_hits[pos.toString()]
+            if (!hits) {
+                hits = []
             }
-            let gap_size = (gap[1] - gap[0])
-            if (gap_size <= config.deg_step) {
-                continue
-            }
-            let gap_points = Math.floor(gap_size / config.deg_step)
-            for (let i = 0;(i < gap_points);i++) {
-                let point_rad = ((gap[0] + i * (gap_size / gap_points)) * Math.PI / 180)
-                if ((i === 0) && (point_rad !== 0)) {
+            let hit_gaps = deg_gap(hits)
+            for (let gap of hit_gaps) {
+                if (gap[1] <= gap[0]) {
+                    gap[1] = (gap[1] + 360)
+                }
+                let gap_size = (gap[1] - gap[0])
+                if (gap_size <= config.deg_step) {
                     continue
                 }
-                draw_line_path(
-                    (pos[0] + Math.cos(point_rad)),
-                    (pos[1] + Math.sin(point_rad)),
-                    config.start_positive,
-                    true
-                )
+                let gap_points = Math.floor(gap_size / config.deg_step)
+                for (let i = 0;(i < gap_points);i++) {
+                    let point_rad = ((gap[0] + i * (gap_size / gap_points)) * Math.PI / 180)
+                    if ((i === 0) && (point_rad !== 0)) {
+                        continue
+                    }
+                    draw_line_path(
+                        (pos[0] + Math.cos(point_rad)),
+                        (pos[1] + Math.sin(point_rad)),
+                        config.start_positive,
+                        true
+                    )
+                }
             }
         }
     }
@@ -149,7 +152,7 @@ function draw_line_path(x,y,reverse,freeze_arrays) {
     let x_pos = x
     let y_pos = y
     let outer_steps_remaining = config.outer_max_steps
-    let inner_steps_remaining = config.inner_max_steps
+    let steps_remaining = config.max_steps
 
     ctx.beginPath()
     ctx.moveTo(x_pos,y_pos)
@@ -157,7 +160,7 @@ function draw_line_path(x,y,reverse,freeze_arrays) {
     let move_path = false
     let prev_pos = null
     let indicator_distance_left = config.indicator_distance
-    while ((outer_steps_remaining > 0) && (inner_steps_remaining > 0)) {
+    while ((outer_steps_remaining > 0) && (steps_remaining > 0)) {
         let [fx,fy] = calculate_field_vector(x_pos,y_pos)
         let normal = Math.sqrt(fx ** 2 + fy ** 2)
         if (normal == 0) {
@@ -199,7 +202,7 @@ function draw_line_path(x,y,reverse,freeze_arrays) {
             move_path = true
             outer_steps_remaining = (outer_steps_remaining - 1)
         }
-        inner_steps_remaining = (inner_steps_remaining - 1)
+        steps_remaining = (steps_remaining - 1)
 
         let escape = false
         for (let charge_entry of Object.entries(charges)) {
