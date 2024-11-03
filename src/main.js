@@ -1,6 +1,6 @@
 const config = {
     "start_positive": true,
-    "indicator_enabled": false,
+    "indicator_enabled": true,
     "symbol_radius": 10,
     "step_size": 5,
     "indicator_distance": 250,
@@ -91,26 +91,61 @@ function render() {
 
 }
 
+let charge_hits = {}
 function spread_from_charges() {
-    let charge_array = null
+    charge_hits = {}
+    let primary_array = null
+    let secondary_array = null
     if (config.start_positive) {
-        charge_array = charges.positive
+        primary_array = charges.positive
+        secondary_array = charges.negative
     } else {
-        charge_array = charges.negative
+        primary_array = charges.negative
+        secondary_array = charges.positive
     }
-    for (let pos of charge_array) {
+    for (let pos of primary_array) {
         for (let angle = 0;(angle < 360);(angle = (angle + config.deg_step))) {
             let rad_step = (angle * Math.PI / 180)
             draw_line_path(
                 (pos[0] + Math.cos(rad_step)),
                 (pos[1] + Math.sin(rad_step)),
-                config.start_positive
+                (!config.start_positive),
+                false
             )
+        }
+    }
+    for (let pos of secondary_array) {
+        let hits = charge_hits[pos.toString()]
+        if (!hits) {
+            hits = []
+        }
+        let hit_gaps = deg_gap(hits)
+        for (let gap of hit_gaps) {
+            if (gap[1] <= gap[0]) {
+                gap[1] = (gap[1] + 360)
+            }
+            let gap_size = (gap[1] - gap[0])
+            if (gap_size <= config.deg_step) {
+                continue
+            }
+            let gap_points = Math.floor(gap_size / config.deg_step)
+            for (let i = 0;(i < gap_points);i++) {
+                let point_rad = ((gap[0] + i * (gap_size / gap_points)) * Math.PI / 180)
+                if ((i === 0) && (point_rad !== 0)) {
+                    continue
+                }
+                draw_line_path(
+                    (pos[0] + Math.cos(point_rad)),
+                    (pos[1] + Math.sin(point_rad)),
+                    config.start_positive,
+                    true
+                )
+            }
         }
     }
 }
 
-function draw_line_path(x,y,reverse) {
+function draw_line_path(x,y,reverse,freeze_arrays) {
     let x_pos = x
     let y_pos = y
     let outer_steps_remaining = config.outer_max_steps
@@ -132,11 +167,11 @@ function draw_line_path(x,y,reverse) {
         let dy = (config.step_size * fy / normal)
         prev_pos = [x_pos,y_pos]
         if (reverse) {
-            x_pos = (x_pos - dx)
-            y_pos = (y_pos - dy)
-        } else {
             x_pos = (x_pos + dx)
             y_pos = (y_pos + dy)
+        } else {
+            x_pos = (x_pos - dx)
+            y_pos = (y_pos - dy)
         }
         let distance = Math.sqrt(dx ** 2 + dy ** 2)
         indicator_distance_left = (indicator_distance_left - distance)
@@ -169,7 +204,17 @@ function draw_line_path(x,y,reverse) {
         let escape = false
         for (let charge_entry of Object.entries(charges)) {
             for (let pos of charge_entry[1]) {
-                if (Math.sqrt((x_pos - pos[0]) ** 2 + (y_pos - pos[1]) ** 2) < config.step_size) {
+                let charge_dx = (x_pos - pos[0])
+                let charge_dy = (y_pos - pos[1])
+                if (Math.sqrt(charge_dx ** 2 + charge_dy ** 2) <= config.step_size) {
+                    if (!freeze_arrays) {
+                        let entry_angle = (Math.atan2(-charge_dy,-charge_dx) / Math.PI * 180 + 180)
+                        let pos_string = pos.toString()
+                        if (charge_hits[pos_string] === undefined) {
+                            charge_hits[pos_string] = []
+                        }
+                        charge_hits[pos_string].push(entry_angle)
+                    }
                     escape = true
                     break
                 }
@@ -238,4 +283,21 @@ function calculate_field_vector(x,y) {
         }
     }
     return [fx,fy]
+}
+
+function deg_gap(existing) {
+    existing.sort((a, b) => a - b)
+    let result = []
+
+    if (existing.length === 0) {
+        return [[0,360]]
+    }
+
+    for (let i = 0;(i < (existing.length - 1));i++) {
+        result.push([existing[i],existing[i + 1]])
+    }
+
+    result.push([existing[existing.length - 1],(360 + existing[0])])
+
+    return result
 }
